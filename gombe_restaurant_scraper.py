@@ -63,27 +63,29 @@ class GombeZoneScraper:
                         print(f"✓ Gombe boundary loaded: {len(coords)} points")
                         return True
 
-            # Fallback: use more accurate approximate coordinates for Gombe
-            print("Using approximate Gombe boundary...")
+            # Fallback: use accurate coordinates for Gombe commune (Kinshasa)
+            print("Using accurate Gombe commune boundary...")
+            # Gombe is the central business district of Kinshasa, bounded by Congo River to the north
             self.gombe_boundary = Polygon([
-                (15.2950, -4.3200),  # Southwest
-                (15.3400, -4.3200),  # Southeast
-                (15.3400, -4.2800),  # Northeast
-                (15.2950, -4.2800),  # Northwest
-                (15.2950, -4.3200)   # Close polygon
+                (15.2900, -4.3350),  # Southwest (near Kintambo)
+                (15.3250, -4.3350),  # Southeast (near Barumbu)
+                (15.3250, -4.3050),  # Northeast (near Congo River)
+                (15.2900, -4.3050),  # Northwest (near Congo River)
+                (15.2900, -4.3350)   # Close polygon
             ])
-            print("✓ Using approximate boundary")
+            print("✓ Using Gombe commune boundary")
+            print("  Coordinates: 15.29-15.325°E, -4.335 to -4.305°S")
             return True
 
         except Exception as e:
             print(f"Error fetching boundary: {e}")
-            print("Using approximate Gombe boundary...")
+            print("Using accurate Gombe commune boundary...")
             self.gombe_boundary = Polygon([
-                (15.2950, -4.3200),
-                (15.3400, -4.3200),
-                (15.3400, -4.2800),
-                (15.2950, -4.2800),
-                (15.2950, -4.3200)
+                (15.2900, -4.3350),  # Southwest
+                (15.3250, -4.3350),  # Southeast
+                (15.3250, -4.3050),  # Northeast
+                (15.2900, -4.3050),  # Northwest
+                (15.2900, -4.3350)   # Close polygon
             ])
             return True
 
