@@ -33,7 +33,7 @@ class GombeZoneScraper:
         print("Fetching Gombe commune boundary from OpenStreetMap...")
 
         # Overpass API query for Gombe commune
-        overpass_url = "http://overpass-api.de/api/interpreter"
+        overpass_url = "https://overpass-api.de/api/interpreter"
         overpass_query = """
         [out:json][timeout:25];
         area["name"="Kinshasa"]["admin_level"="4"]->.a;
@@ -44,7 +44,7 @@ class GombeZoneScraper:
         """
 
         try:
-            response = requests.post(overpass_url, data={'data': overpass_query})
+            response = requests.post(overpass_url, data={'data': overpass_query}, timeout=30)
             data = response.json()
 
             if data['elements']:
@@ -63,14 +63,14 @@ class GombeZoneScraper:
                         print(f"✓ Gombe boundary loaded: {len(coords)} points")
                         return True
 
-            # Fallback: use approximate coordinates for Gombe
+            # Fallback: use more accurate approximate coordinates for Gombe
             print("Using approximate Gombe boundary...")
             self.gombe_boundary = Polygon([
-                (15.305, -4.305),  # Southwest
-                (15.335, -4.305),  # Southeast
-                (15.335, -4.285),  # Northeast
-                (15.305, -4.285),  # Northwest
-                (15.305, -4.305)   # Close polygon
+                (15.2950, -4.3200),  # Southwest
+                (15.3400, -4.3200),  # Southeast
+                (15.3400, -4.2800),  # Northeast
+                (15.2950, -4.2800),  # Northwest
+                (15.2950, -4.3200)   # Close polygon
             ])
             print("✓ Using approximate boundary")
             return True
@@ -79,11 +79,11 @@ class GombeZoneScraper:
             print(f"Error fetching boundary: {e}")
             print("Using approximate Gombe boundary...")
             self.gombe_boundary = Polygon([
-                (15.305, -4.305),
-                (15.335, -4.305),
-                (15.335, -4.285),
-                (15.305, -4.285),
-                (15.305, -4.305)
+                (15.2950, -4.3200),
+                (15.3400, -4.3200),
+                (15.3400, -4.2800),
+                (15.2950, -4.2800),
+                (15.2950, -4.3200)
             ])
             return True
 
@@ -161,10 +161,12 @@ class GombeZoneScraper:
         }
 
         try:
-            response = requests.get(url, params=params)
+            # First request
+            response = requests.get(url, params=params, timeout=10)
             data = response.json()
 
             if data['status'] == 'OK':
+                # Process first page of results
                 for place in data['results']:
                     restaurant = {
                         'zone_id': zone['zone_id'],
@@ -180,6 +182,37 @@ class GombeZoneScraper:
                     }
                     restaurants.append(restaurant)
 
+                # Handle pagination if there are more results
+                while 'next_page_token' in data:
+                    # Wait for token to become valid (Google requirement)
+                    time.sleep(2)
+
+                    next_params = {
+                        'pagetoken': data['next_page_token'],
+                        'key': GOOGLE_API_KEY
+                    }
+
+                    response = requests.get(url, params=next_params, timeout=10)
+                    data = response.json()
+
+                    if data['status'] == 'OK':
+                        for place in data['results']:
+                            restaurant = {
+                                'zone_id': zone['zone_id'],
+                                'name': place.get('name', ''),
+                                'address': place.get('vicinity', ''),
+                                'lat': place['geometry']['location']['lat'],
+                                'lon': place['geometry']['location']['lng'],
+                                'rating': place.get('rating', None),
+                                'user_ratings_total': place.get('user_ratings_total', None),
+                                'place_id': place.get('place_id', ''),
+                                'types': ', '.join(place.get('types', [])),
+                                'source': 'Google Places'
+                            }
+                            restaurants.append(restaurant)
+                    else:
+                        break
+
             elif data['status'] == 'ZERO_RESULTS':
                 pass  # No restaurants in this zone
             else:
@@ -188,6 +221,8 @@ class GombeZoneScraper:
             # Respect API rate limits
             time.sleep(0.1)
 
+        except requests.Timeout:
+            print(f"  Timeout scraping Google Places for zone {zone['zone_id']}")
         except Exception as e:
             print(f"  Error scraping Google Places for zone {zone['zone_id']}: {e}")
 
@@ -198,7 +233,7 @@ class GombeZoneScraper:
         restaurants = []
 
         # Overpass API query
-        overpass_url = "http://overpass-api.de/api/interpreter"
+        overpass_url = "https://overpass-api.de/api/interpreter"
 
         # Calculate bounding box around center point
         lat, lon = zone['center_lat'], zone['center_lon']
@@ -217,12 +252,16 @@ class GombeZoneScraper:
           way["amenity"="cafe"]({bbox});
           node["amenity"="fast_food"]({bbox});
           way["amenity"="fast_food"]({bbox});
+          node["amenity"="bar"]({bbox});
+          way["amenity"="bar"]({bbox});
+          node["amenity"="pub"]({bbox});
+          way["amenity"="pub"]({bbox});
         );
         out center;
         """
 
         try:
-            response = requests.post(overpass_url, data={'data': overpass_query})
+            response = requests.post(overpass_url, data={'data': overpass_query}, timeout=30)
             data = response.json()
 
             for element in data.get('elements', []):
@@ -255,6 +294,8 @@ class GombeZoneScraper:
             # Respect API rate limits
             time.sleep(1)
 
+        except requests.Timeout:
+            print(f"  Timeout scraping OSM for zone {zone['zone_id']}")
         except Exception as e:
             print(f"  Error scraping OSM for zone {zone['zone_id']}: {e}")
 
@@ -325,7 +366,10 @@ class GombeZoneScraper:
                         break
 
             if not is_duplicate:
-                unique_restaurants.append(restaurant.to_dict())
+                # Convert to dict and remove source_priority column
+                rest_dict = restaurant.to_dict()
+                rest_dict.pop('source_priority', None)
+                unique_restaurants.append(rest_dict)
                 seen_locations.append(current_loc)
 
         self.restaurants = unique_restaurants
@@ -349,9 +393,15 @@ class GombeZoneScraper:
 
         df = pd.DataFrame(self.restaurants)
 
-        # Reorder columns
+        # Ensure source_priority column is removed if it exists
+        if 'source_priority' in df.columns:
+            df = df.drop('source_priority', axis=1)
+
+        # Reorder columns for better readability
         columns = ['zone_id', 'name', 'address', 'lat', 'lon', 'rating',
                    'user_ratings_total', 'types', 'source', 'place_id']
+        # Only select columns that exist in the dataframe
+        columns = [col for col in columns if col in df.columns]
         df = df[columns]
 
         # Create Excel writer
@@ -364,6 +414,7 @@ class GombeZoneScraper:
                 'name': 'count',
                 'rating': 'mean'
             }).rename(columns={'name': 'restaurant_count', 'rating': 'avg_rating'})
+            zone_summary = zone_summary.sort_values('restaurant_count', ascending=False)
             zone_summary.to_excel(writer, sheet_name='Zone Summary')
 
             # Summary by source
@@ -372,8 +423,36 @@ class GombeZoneScraper:
             }).rename(columns={'name': 'restaurant_count'})
             source_summary.to_excel(writer, sheet_name='Source Summary')
 
+            # Format the worksheets
+            workbook = writer.book
+
+            # Format All Restaurants sheet
+            worksheet = writer.sheets['All Restaurants']
+            worksheet.column_dimensions['A'].width = 15  # zone_id
+            worksheet.column_dimensions['B'].width = 35  # name
+            worksheet.column_dimensions['C'].width = 40  # address
+            worksheet.column_dimensions['D'].width = 12  # lat
+            worksheet.column_dimensions['E'].width = 12  # lon
+            worksheet.column_dimensions['F'].width = 10  # rating
+            worksheet.column_dimensions['G'].width = 18  # user_ratings_total
+            worksheet.column_dimensions['H'].width = 30  # types
+            worksheet.column_dimensions['I'].width = 18  # source
+            worksheet.column_dimensions['J'].width = 25  # place_id
+
+            # Format Zone Summary sheet
+            worksheet = writer.sheets['Zone Summary']
+            worksheet.column_dimensions['A'].width = 15
+            worksheet.column_dimensions['B'].width = 20
+            worksheet.column_dimensions['C'].width = 15
+
+            # Format Source Summary sheet
+            worksheet = writer.sheets['Source Summary']
+            worksheet.column_dimensions['A'].width = 20
+            worksheet.column_dimensions['B'].width = 20
+
         print(f"✓ Excel file created: {OUTPUT_EXCEL}")
         print(f"  Sheets: All Restaurants, Zone Summary, Source Summary")
+        print(f"  Total restaurants exported: {len(df)}")
 
         return True
 
