@@ -263,44 +263,76 @@ class GombeZoneScraper:
         out center;
         """
 
-        try:
-            response = requests.post(overpass_url, data={'data': overpass_query}, timeout=30)
-            data = response.json()
+        max_retries = 2
+        retry_count = 0
 
-            for element in data.get('elements', []):
-                # Get coordinates
-                if 'lat' in element and 'lon' in element:
-                    elem_lat = element['lat']
-                    elem_lon = element['lon']
-                elif 'center' in element:
-                    elem_lat = element['center']['lat']
-                    elem_lon = element['center']['lon']
+        while retry_count <= max_retries:
+            try:
+                response = requests.post(overpass_url, data={'data': overpass_query}, timeout=30)
+
+                # Check if response is empty
+                if not response.text or response.text.strip() == '':
+                    if retry_count < max_retries:
+                        retry_count += 1
+                        print(f"  Empty response from OSM, retrying ({retry_count}/{max_retries})...")
+                        time.sleep(5)  # Wait longer before retry
+                        continue
+                    else:
+                        break
+
+                data = response.json()
+
+                for element in data.get('elements', []):
+                    # Get coordinates
+                    if 'lat' in element and 'lon' in element:
+                        elem_lat = element['lat']
+                        elem_lon = element['lon']
+                    elif 'center' in element:
+                        elem_lat = element['center']['lat']
+                        elem_lon = element['center']['lon']
+                    else:
+                        continue
+
+                    tags = element.get('tags', {})
+
+                    restaurant = {
+                        'zone_id': zone['zone_id'],
+                        'name': tags.get('name', 'Unnamed'),
+                        'address': tags.get('addr:street', ''),
+                        'lat': elem_lat,
+                        'lon': elem_lon,
+                        'rating': None,
+                        'user_ratings_total': None,
+                        'place_id': f"osm-{element['type']}-{element['id']}",
+                        'types': tags.get('amenity', ''),
+                        'source': 'OpenStreetMap'
+                    }
+                    restaurants.append(restaurant)
+
+                # Respect API rate limits - increased wait time
+                time.sleep(3)  # Increased from 1s to 3s
+                break  # Success, exit retry loop
+
+            except requests.Timeout:
+                if retry_count < max_retries:
+                    retry_count += 1
+                    print(f"  Timeout from OSM, retrying ({retry_count}/{max_retries})...")
+                    time.sleep(5)
                 else:
-                    continue
-
-                tags = element.get('tags', {})
-
-                restaurant = {
-                    'zone_id': zone['zone_id'],
-                    'name': tags.get('name', 'Unnamed'),
-                    'address': tags.get('addr:street', ''),
-                    'lat': elem_lat,
-                    'lon': elem_lon,
-                    'rating': None,
-                    'user_ratings_total': None,
-                    'place_id': f"osm-{element['type']}-{element['id']}",
-                    'types': tags.get('amenity', ''),
-                    'source': 'OpenStreetMap'
-                }
-                restaurants.append(restaurant)
-
-            # Respect API rate limits
-            time.sleep(1)
-
-        except requests.Timeout:
-            print(f"  Timeout scraping OSM for zone {zone['zone_id']}")
-        except Exception as e:
-            print(f"  Error scraping OSM for zone {zone['zone_id']}: {e}")
+                    print(f"  Timeout scraping OSM for zone {zone['zone_id']} after {max_retries} retries")
+                    break
+            except ValueError as e:
+                # JSON parsing error
+                if retry_count < max_retries:
+                    retry_count += 1
+                    print(f"  Invalid response from OSM, retrying ({retry_count}/{max_retries})...")
+                    time.sleep(5)
+                else:
+                    print(f"  Invalid JSON from OSM for zone {zone['zone_id']}")
+                    break
+            except Exception as e:
+                print(f"  Error scraping OSM for zone {zone['zone_id']}: {e}")
+                break
 
         return restaurants
 
