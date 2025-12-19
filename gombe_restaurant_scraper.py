@@ -63,29 +63,51 @@ class GombeZoneScraper:
                         print(f"✓ Gombe boundary loaded: {len(coords)} points")
                         return True
 
-            # Fallback: use accurate coordinates for Gombe commune (Kinshasa)
-            print("Using accurate Gombe commune boundary...")
-            # Gombe is the central business district of Kinshasa, bounded by Congo River to the north
+            # Fallback: use exact Gombe commune boundary coordinates
+            print("Using exact Gombe commune boundary...")
             self.gombe_boundary = Polygon([
-                (15.2900, -4.3350),  # Southwest (near Kintambo)
-                (15.3250, -4.3350),  # Southeast (near Barumbu)
-                (15.3250, -4.3050),  # Northeast (near Congo River)
-                (15.2900, -4.3050),  # Northwest (near Congo River)
-                (15.2900, -4.3350)   # Close polygon
+                (15.27984918931836, -4.301048471090325),
+                (15.27627583152506, -4.302865274255328),
+                (15.27201970350358, -4.308769949363948),
+                (15.26547687243528, -4.315710288633783),
+                (15.26199377309104, -4.322047518006186),
+                (15.25850626035386, -4.327518392192644),
+                (15.26401704242657, -4.333232640256546),
+                (15.27454344264567, -4.327421032233625),
+                (15.28654882166330, -4.320915141232931),
+                (15.30020674038804, -4.316404321048534),
+                (15.32580430159864, -4.313019075934860),
+                (15.32458181483468, -4.303211787948333),
+                (15.31979617646593, -4.297482603324646),
+                (15.31013733370281, -4.296698817119354),
+                (15.29637980785769, -4.301915322959200),
+                (15.28924507894354, -4.304864625615211),
+                (15.27984918931836, -4.301048471090325),
             ])
-            print("✓ Using Gombe commune boundary")
-            print("  Coordinates: 15.29-15.325°E, -4.335 to -4.305°S")
+            print("✓ Using exact Gombe commune boundary (17 points)")
             return True
 
         except Exception as e:
             print(f"Error fetching boundary: {e}")
-            print("Using accurate Gombe commune boundary...")
+            print("Using exact Gombe commune boundary...")
             self.gombe_boundary = Polygon([
-                (15.2900, -4.3350),  # Southwest
-                (15.3250, -4.3350),  # Southeast
-                (15.3250, -4.3050),  # Northeast
-                (15.2900, -4.3050),  # Northwest
-                (15.2900, -4.3350)   # Close polygon
+                (15.27984918931836, -4.301048471090325),
+                (15.27627583152506, -4.302865274255328),
+                (15.27201970350358, -4.308769949363948),
+                (15.26547687243528, -4.315710288633783),
+                (15.26199377309104, -4.322047518006186),
+                (15.25850626035386, -4.327518392192644),
+                (15.26401704242657, -4.333232640256546),
+                (15.27454344264567, -4.327421032233625),
+                (15.28654882166330, -4.320915141232931),
+                (15.30020674038804, -4.316404321048534),
+                (15.32580430159864, -4.313019075934860),
+                (15.32458181483468, -4.303211787948333),
+                (15.31979617646593, -4.297482603324646),
+                (15.31013733370281, -4.296698817119354),
+                (15.29637980785769, -4.301915322959200),
+                (15.28924507894354, -4.304864625615211),
+                (15.27984918931836, -4.301048471090325),
             ])
             return True
 
@@ -179,6 +201,7 @@ class GombeZoneScraper:
                         'address': place.get('vicinity', ''),
                         'lat': place['geometry']['location']['lat'],
                         'lon': place['geometry']['location']['lng'],
+                        'phone': None,  # Phone not available in nearby search
                         'rating': place.get('rating', None),
                         'user_ratings_total': place.get('user_ratings_total', None),
                         'place_id': place.get('place_id', ''),
@@ -208,6 +231,7 @@ class GombeZoneScraper:
                                 'address': place.get('vicinity', ''),
                                 'lat': place['geometry']['location']['lat'],
                                 'lon': place['geometry']['location']['lng'],
+                                'phone': None,  # Phone not available in nearby search
                                 'rating': place.get('rating', None),
                                 'user_ratings_total': place.get('user_ratings_total', None),
                                 'place_id': place.get('place_id', ''),
@@ -297,12 +321,16 @@ class GombeZoneScraper:
 
                     tags = element.get('tags', {})
 
+                    # Extract phone number (try multiple tag formats)
+                    phone = tags.get('phone') or tags.get('contact:phone') or tags.get('phone:mobile')
+
                     restaurant = {
                         'zone_id': zone['zone_id'],
                         'name': tags.get('name', 'Unnamed'),
                         'address': tags.get('addr:street', ''),
                         'lat': elem_lat,
                         'lon': elem_lon,
+                        'phone': phone,
                         'rating': None,
                         'user_ratings_total': None,
                         'place_id': f"osm-{element['type']}-{element['id']}",
@@ -435,7 +463,7 @@ class GombeZoneScraper:
             df = df.drop('source_priority', axis=1)
 
         # Reorder columns for better readability
-        columns = ['zone_id', 'name', 'address', 'lat', 'lon', 'rating',
+        columns = ['zone_id', 'name', 'address', 'phone', 'lat', 'lon', 'rating',
                    'user_ratings_total', 'types', 'source', 'place_id']
         # Only select columns that exist in the dataframe
         columns = [col for col in columns if col in df.columns]
@@ -468,13 +496,14 @@ class GombeZoneScraper:
             worksheet.column_dimensions['A'].width = 15  # zone_id
             worksheet.column_dimensions['B'].width = 35  # name
             worksheet.column_dimensions['C'].width = 40  # address
-            worksheet.column_dimensions['D'].width = 12  # lat
-            worksheet.column_dimensions['E'].width = 12  # lon
-            worksheet.column_dimensions['F'].width = 10  # rating
-            worksheet.column_dimensions['G'].width = 18  # user_ratings_total
-            worksheet.column_dimensions['H'].width = 30  # types
-            worksheet.column_dimensions['I'].width = 18  # source
-            worksheet.column_dimensions['J'].width = 25  # place_id
+            worksheet.column_dimensions['D'].width = 18  # phone
+            worksheet.column_dimensions['E'].width = 12  # lat
+            worksheet.column_dimensions['F'].width = 12  # lon
+            worksheet.column_dimensions['G'].width = 10  # rating
+            worksheet.column_dimensions['H'].width = 18  # user_ratings_total
+            worksheet.column_dimensions['I'].width = 30  # types
+            worksheet.column_dimensions['J'].width = 18  # source
+            worksheet.column_dimensions['K'].width = 25  # place_id
 
             # Format Zone Summary sheet
             worksheet = writer.sheets['Zone Summary']
