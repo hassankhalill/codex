@@ -202,6 +202,7 @@ class GombeZoneScraper:
                         'lat': place['geometry']['location']['lat'],
                         'lon': place['geometry']['location']['lng'],
                         'phone': None,  # Phone not available in nearby search
+                        'email': None,  # Email not available in nearby search
                         'rating': place.get('rating', None),
                         'user_ratings_total': place.get('user_ratings_total', None),
                         'place_id': place.get('place_id', ''),
@@ -232,6 +233,7 @@ class GombeZoneScraper:
                                 'lat': place['geometry']['location']['lat'],
                                 'lon': place['geometry']['location']['lng'],
                                 'phone': None,  # Phone not available in nearby search
+                                'email': None,  # Email not available in nearby search
                                 'rating': place.get('rating', None),
                                 'user_ratings_total': place.get('user_ratings_total', None),
                                 'place_id': place.get('place_id', ''),
@@ -324,6 +326,9 @@ class GombeZoneScraper:
                     # Extract phone number (try multiple tag formats)
                     phone = tags.get('phone') or tags.get('contact:phone') or tags.get('phone:mobile')
 
+                    # Extract email (try multiple tag formats)
+                    email = tags.get('email') or tags.get('contact:email')
+
                     restaurant = {
                         'zone_id': zone['zone_id'],
                         'name': tags.get('name', 'Unnamed'),
@@ -331,6 +336,7 @@ class GombeZoneScraper:
                         'lat': elem_lat,
                         'lon': elem_lon,
                         'phone': phone,
+                        'email': email,
                         'rating': None,
                         'user_ratings_total': None,
                         'place_id': f"osm-{element['type']}-{element['id']}",
@@ -463,7 +469,7 @@ class GombeZoneScraper:
             df = df.drop('source_priority', axis=1)
 
         # Reorder columns for better readability
-        columns = ['zone_id', 'name', 'address', 'phone', 'lat', 'lon', 'rating',
+        columns = ['zone_id', 'name', 'address', 'phone', 'email', 'lat', 'lon', 'rating',
                    'user_ratings_total', 'types', 'source', 'place_id']
         # Only select columns that exist in the dataframe
         columns = [col for col in columns if col in df.columns]
@@ -497,13 +503,14 @@ class GombeZoneScraper:
             worksheet.column_dimensions['B'].width = 35  # name
             worksheet.column_dimensions['C'].width = 40  # address
             worksheet.column_dimensions['D'].width = 18  # phone
-            worksheet.column_dimensions['E'].width = 12  # lat
-            worksheet.column_dimensions['F'].width = 12  # lon
-            worksheet.column_dimensions['G'].width = 10  # rating
-            worksheet.column_dimensions['H'].width = 18  # user_ratings_total
-            worksheet.column_dimensions['I'].width = 30  # types
-            worksheet.column_dimensions['J'].width = 18  # source
-            worksheet.column_dimensions['K'].width = 25  # place_id
+            worksheet.column_dimensions['E'].width = 30  # email
+            worksheet.column_dimensions['F'].width = 12  # lat
+            worksheet.column_dimensions['G'].width = 12  # lon
+            worksheet.column_dimensions['H'].width = 10  # rating
+            worksheet.column_dimensions['I'].width = 18  # user_ratings_total
+            worksheet.column_dimensions['J'].width = 30  # types
+            worksheet.column_dimensions['K'].width = 18  # source
+            worksheet.column_dimensions['L'].width = 25  # place_id
 
             # Format Zone Summary sheet
             worksheet = writer.sheets['Zone Summary']
