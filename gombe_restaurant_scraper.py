@@ -110,8 +110,8 @@ class GombeZoneScraper:
             while lon <= maxx:
                 point = Point(lon, lat)
                 if self.gombe_boundary.contains(point):
-                    # Get H3 hexagon for this point
-                    h3_hex = h3.geo_to_h3(lat, lon, H3_RESOLUTION)
+                    # Get H3 hexagon for this point (h3 v4 API)
+                    h3_hex = h3.latlng_to_cell(lat, lon, H3_RESOLUTION)
                     h3_hexagons.add(h3_hex)
                 lon += lon_step
             lat += lat_step
@@ -119,11 +119,14 @@ class GombeZoneScraper:
         # Convert H3 hexagons to polygons
         zone_id = 1
         for h3_hex in h3_hexagons:
-            boundary = h3.h3_to_geo_boundary(h3_hex, geo_json=True)
-            polygon = Polygon(boundary)
+            # h3 v4 API
+            boundary = h3.cell_to_boundary(h3_hex)
+            # Convert to GeoJSON format (list of [lon, lat] pairs)
+            boundary_geojson = [(lon, lat) for lat, lon in boundary]
+            polygon = Polygon(boundary_geojson)
 
-            # Get center point
-            center = h3.h3_to_geo(h3_hex)
+            # Get center point (h3 v4 API)
+            center = h3.cell_to_latlng(h3_hex)
 
             self.zones.append({
                 'zone_id': f'GOMBE-{zone_id:03d}',
