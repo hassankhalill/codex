@@ -174,6 +174,33 @@ class GombeZoneScraper:
         print(f"✓ Zones saved to {OUTPUT_ZONES}")
         return True
 
+    def get_place_details(self, place_id):
+        """Fetch detailed information for a place including phone number and website"""
+        url = "https://maps.googleapis.com/maps/api/place/details/json"
+
+        params = {
+            'place_id': place_id,
+            'fields': 'formatted_phone_number,international_phone_number,website',
+            'key': GOOGLE_API_KEY
+        }
+
+        try:
+            response = requests.get(url, params=params, timeout=10)
+            data = response.json()
+
+            if data['status'] == 'OK':
+                result = data.get('result', {})
+                return {
+                    'phone': result.get('formatted_phone_number') or result.get('international_phone_number'),
+                    'website': result.get('website')
+                }
+            else:
+                return {'phone': None, 'website': None}
+
+        except Exception as e:
+            print(f"    Error fetching place details: {e}")
+            return {'phone': None, 'website': None}
+
     def scrape_google_places(self, zone):
         """Scrape restaurants from Google Places API for a zone"""
         restaurants = []
@@ -195,17 +222,24 @@ class GombeZoneScraper:
             if data['status'] == 'OK':
                 # Process first page of results
                 for place in data['results']:
+                    # Get additional details including phone number
+                    place_id = place.get('place_id', '')
+                    details = self.get_place_details(place_id) if place_id else {'phone': None, 'website': None}
+
+                    # Small delay to respect API rate limits
+                    time.sleep(0.05)
+
                     restaurant = {
                         'zone_id': zone['zone_id'],
                         'name': place.get('name', ''),
                         'address': place.get('vicinity', ''),
                         'lat': place['geometry']['location']['lat'],
                         'lon': place['geometry']['location']['lng'],
-                        'phone': None,  # Phone not available in nearby search
-                        'email': None,  # Email not available in nearby search
+                        'phone': details['phone'],
+                        'email': None,  # Email not available from Google Places API
                         'rating': place.get('rating', None),
                         'user_ratings_total': place.get('user_ratings_total', None),
-                        'place_id': place.get('place_id', ''),
+                        'place_id': place_id,
                         'types': ', '.join(place.get('types', [])),
                         'source': 'Google Places'
                     }
@@ -226,17 +260,24 @@ class GombeZoneScraper:
 
                     if data['status'] == 'OK':
                         for place in data['results']:
+                            # Get additional details including phone number
+                            place_id = place.get('place_id', '')
+                            details = self.get_place_details(place_id) if place_id else {'phone': None, 'website': None}
+
+                            # Small delay to respect API rate limits
+                            time.sleep(0.05)
+
                             restaurant = {
                                 'zone_id': zone['zone_id'],
                                 'name': place.get('name', ''),
                                 'address': place.get('vicinity', ''),
                                 'lat': place['geometry']['location']['lat'],
                                 'lon': place['geometry']['location']['lng'],
-                                'phone': None,  # Phone not available in nearby search
-                                'email': None,  # Email not available in nearby search
+                                'phone': details['phone'],
+                                'email': None,  # Email not available from Google Places API
                                 'rating': place.get('rating', None),
                                 'user_ratings_total': place.get('user_ratings_total', None),
-                                'place_id': place.get('place_id', ''),
+                                'place_id': place_id,
                                 'types': ', '.join(place.get('types', [])),
                                 'source': 'Google Places'
                             }
